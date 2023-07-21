@@ -27,10 +27,11 @@
 #include "presto_cpp/main/common/Configs.h"
 #include "presto_cpp/main/common/Counters.h"
 #include "presto_cpp/main/common/Utils.h"
-#include "presto_cpp/main/connectors/hive/storage_adapters/FileSystems.h"
 #include "presto_cpp/main/http/HttpServer.h"
 #include "presto_cpp/main/http/filters/AccessLogFilter.h"
 #include "presto_cpp/main/http/filters/StatsFilter.h"
+#include "presto_cpp/main/operators/BroadcastExchangeSource.h"
+#include "presto_cpp/main/operators/BroadcastWrite.h"
 #include "presto_cpp/main/operators/LocalPersistentShuffle.h"
 #include "presto_cpp/main/operators/PartitionAndSerialize.h"
 #include "presto_cpp/main/operators/ShuffleInterface.h"
@@ -47,10 +48,6 @@
 #include "velox/connectors/Connector.h"
 #include "velox/connectors/hive/HiveConnector.h"
 #include "velox/core/Config.h"
-#include "velox/dwio/dwrf/reader/DwrfReader.h"
-#include "velox/dwio/dwrf/writer/Writer.h"
-#include "velox/dwio/parquet/RegisterParquetReader.h"
-#include "velox/dwio/parquet/RegisterParquetWriter.h"
 #include "velox/exec/PartitionedOutputBufferManager.h"
 #include "velox/functions/prestosql/aggregates/RegisterAggregateFunctions.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
@@ -172,16 +169,10 @@ void PrestoServer::run() {
   registerStatsCounters();
   registerFileSinks();
   registerFileSystems();
-  registerOptionalHiveStorageAdapters();
   registerShuffleInterfaceFactories();
   registerCustomOperators();
   protocol::registerHiveConnectors();
   protocol::registerTpchConnector();
-
-  auto executor = std::make_shared<folly::IOThreadPoolExecutor>(
-      systemConfig->numIoThreads(),
-      std::make_shared<folly::NamedThreadFactory>("PrestoWorkerNetwork"));
-  folly::setUnsafeMutableGlobalIOExecutor(executor);
 
   initializeVeloxMemory();
 
@@ -281,17 +272,29 @@ void PrestoServer::run() {
   registerVectorSerdes();
   registerPrestoPlanNodeSerDe();
 
+  exchangeExecutor_ = std::make_shared<folly::IOThreadPoolExecutor>(
+      systemConfig->numIoThreads(),
+      std::make_shared<folly::NamedThreadFactory>("PrestoWorkerNetwork"));
+
+  PRESTO_STARTUP_LOG(INFO) << "Exchange executor has "
+                           << exchangeExecutor_->numThreads() << " threads.";
+
   facebook::velox::exec::ExchangeSource::registerFactory(
-      PrestoExchangeSource::createExchangeSource);
+      [this](
+          const std::string& taskId,
+          int destination,
+          std::shared_ptr<velox::exec::ExchangeQueue> queue,
+          memory::MemoryPool* pool) {
+        return PrestoExchangeSource::create(
+            taskId, destination, queue, pool, exchangeExecutor_);
+      });
+
   facebook::velox::exec::ExchangeSource::registerFactory(
       operators::UnsafeRowExchangeSource::createExchangeSource);
 
-  velox::dwrf::registerDwrfReaderFactory();
-  velox::dwrf::registerDwrfWriterFactory();
-
-  velox::parquet::registerParquetReaderFactory(
-      velox::parquet::ParquetReaderType::NATIVE);
-  velox::parquet::registerParquetWriterFactory();
+  // Batch broadcast exchange source.
+  facebook::velox::exec::ExchangeSource::registerFactory(
+      operators::BroadcastExchangeSource::createExchangeSource);
 
   pool_ = velox::memory::addDefaultLeafMemoryPool();
   taskManager_ = std::make_unique<TaskManager>();
@@ -391,7 +394,7 @@ void PrestoServer::run() {
 
   auto cpuExecutor = driverCPUExecutor();
   PRESTO_SHUTDOWN_LOG(INFO)
-      << "Joining Driver CPU Executor '" << cpuExecutor->getName()
+      << "Joining driver CPU Executor '" << cpuExecutor->getName()
       << "': threads: " << cpuExecutor->numActiveThreads() << "/"
       << cpuExecutor->numThreads()
       << ", task queue: " << cpuExecutor->getTaskQueueSize();
@@ -399,11 +402,17 @@ void PrestoServer::run() {
 
   if (connectorIoExecutor_) {
     PRESTO_SHUTDOWN_LOG(INFO)
-        << "Joining IO Executor '" << connectorIoExecutor_->getName()
+        << "Joining connector IO Executor '" << connectorIoExecutor_->getName()
         << "': threads: " << connectorIoExecutor_->numActiveThreads() << "/"
         << connectorIoExecutor_->numThreads();
     connectorIoExecutor_->join();
   }
+
+  PRESTO_SHUTDOWN_LOG(INFO)
+      << "Joining exchange Executor '" << exchangeExecutor_->getName()
+      << "': threads: " << exchangeExecutor_->numActiveThreads() << "/"
+      << exchangeExecutor_->numThreads();
+  exchangeExecutor_->join();
 
   PRESTO_SHUTDOWN_LOG(INFO) << "Done joining our executors.";
 
@@ -446,8 +455,7 @@ void PrestoServer::yieldTasks() {
 void PrestoServer::initializeVeloxMemory() {
   auto nodeConfig = NodeConfig::instance();
   auto systemConfig = SystemConfig::instance();
-  uint64_t memoryGb = nodeConfig->nodeMemoryGb(
-      [&]() { return systemConfig->systemMemoryGb(); });
+  uint64_t memoryGb = systemConfig->systemMemoryGb();
   PRESTO_STARTUP_LOG(INFO) << "Starting with node memory " << memoryGb << "GB";
 
   const int64_t memoryBytes = memoryGb << 30;
@@ -496,25 +504,24 @@ void PrestoServer::initializeVeloxMemory() {
 
   memory::MemoryAllocator::setDefaultInstance(allocator_.get());
   // Set up velox memory manager.
-  memory::MemoryManager::Options options;
+  memory::MemoryManagerOptions options;
   options.capacity = memoryBytes;
   options.checkUsageLeak = systemConfig->enableMemoryLeakCheck();
   if (systemConfig->enableMemoryArbitration()) {
     auto& arbitratorCfg = options.arbitratorConfig;
     arbitratorCfg.kind = memory::MemoryArbitrator::Kind::kShared;
-    // TODO: remove this option by making arbitration failure retry a default
-    // behavior.
-    arbitratorCfg.retryArbitrationFailure = true;
     arbitratorCfg.capacity =
         memoryBytes * 100 / systemConfig->reservedMemoryPoolCapacityPct();
     arbitratorCfg.initMemoryPoolCapacity =
-        systemConfig->initMemoryPoolCapacity();
+        systemConfig->memoryPoolInitCapacity();
     arbitratorCfg.minMemoryPoolCapacityTransferSize =
-        systemConfig->minMemoryPoolTransferCapacity();
+        systemConfig->memoryPoolTransferCapacity();
   }
   const auto& manager = memory::MemoryManager::getInstance(options, true);
   PRESTO_STARTUP_LOG(INFO) << "Memory manager has been setup: "
                            << manager.toString();
+  PRESTO_STARTUP_LOG(INFO) << "Spilling root directory: "
+                           << systemConfig->spillerSpillPath().value_or("NULL");
 }
 
 void PrestoServer::stop() {
@@ -608,6 +615,10 @@ std::vector<std::string> PrestoServer::registerConnectors(
   if (numConnectorIoThreads) {
     connectorIoExecutor_ =
         std::make_unique<folly::IOThreadPoolExecutor>(numConnectorIoThreads);
+
+    PRESTO_STARTUP_LOG(INFO)
+        << "Connector IO executor has " << connectorIoExecutor_->numThreads()
+        << " threads.";
   }
   std::vector<std::string> catalogNames;
 
@@ -667,6 +678,12 @@ void PrestoServer::registerCustomOperators() {
       std::make_unique<facebook::presto::operators::ShuffleWriteTranslator>());
   facebook::velox::exec::Operator::registerOperator(
       std::make_unique<operators::ShuffleReadTranslator>());
+
+  // Todo - Split Presto & Presto-on-Spark server into different classes
+  // which will allow server specific operator registration.
+  facebook::velox::exec::Operator::registerOperator(
+      std::make_unique<
+          facebook::presto::operators::BroadcastWriteTranslator>());
 }
 
 void PrestoServer::registerFunctions() {

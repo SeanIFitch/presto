@@ -142,7 +142,14 @@ class TaskManagerTest : public testing::Test {
     aggregate::prestosql::registerAllAggregateFunctions();
     parse::registerTypeResolver();
     exec::ExchangeSource::registerFactory(
-        PrestoExchangeSource::createExchangeSource);
+        [executor = exchangeExecutor_](
+            const std::string& taskId,
+            int destination,
+            std::shared_ptr<exec::ExchangeQueue> queue,
+            memory::MemoryPool* pool) {
+          return PrestoExchangeSource::create(
+              taskId, destination, queue, pool, executor);
+        });
     if (!isRegisteredVectorSerde()) {
       serializer::presto::PrestoVectorSerde::registerVectorSerde();
     };
@@ -154,7 +161,6 @@ class TaskManagerTest : public testing::Test {
             ->newConnector(
                 facebook::velox::exec::test::kHiveConnectorId, nullptr);
     connector::registerConnector(hiveConnector);
-    dwrf::registerDwrfReaderFactory();
 
     rootPool_ =
         memory::defaultMemoryManager().addRootPool("TaskManagerTest.root");
@@ -187,7 +193,6 @@ class TaskManagerTest : public testing::Test {
     }
     connector::unregisterConnector(
         facebook::velox::exec::test::kHiveConnectorId);
-    dwrf::unregisterDwrfReaderFactory();
   }
 
   std::vector<RowVectorPtr> makeVectors(int count, int rowsPerVector) {
@@ -575,6 +580,8 @@ class TaskManagerTest : public testing::Test {
   std::unique_ptr<TaskManager> taskManager_;
   std::unique_ptr<TaskResource> taskResource_;
   std::unique_ptr<facebook::presto::test::HttpServerWrapper> httpServerWrapper_;
+  std::shared_ptr<folly::IOThreadPoolExecutor> exchangeExecutor_ =
+      std::make_shared<folly::IOThreadPoolExecutor>(10);
   long splitSequenceId_{0};
 };
 
