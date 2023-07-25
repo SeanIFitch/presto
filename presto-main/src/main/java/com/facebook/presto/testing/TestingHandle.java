@@ -13,12 +13,16 @@
  */
 package com.facebook.presto.testing;
 
+import com.facebook.drift.annotations.ThriftEnum;
+import com.facebook.drift.annotations.ThriftEnumUnknownValue;
 import com.facebook.presto.spi.ConnectorInsertTableHandle;
 import com.facebook.presto.spi.ConnectorOutputTableHandle;
 import com.facebook.presto.spi.ConnectorTableLayoutHandle;
 
+@ThriftEnum
 public enum TestingHandle
         implements ConnectorOutputTableHandle, ConnectorInsertTableHandle, ConnectorTableLayoutHandle
 {
+    @ThriftEnumUnknownValue
     INSTANCE
 }
