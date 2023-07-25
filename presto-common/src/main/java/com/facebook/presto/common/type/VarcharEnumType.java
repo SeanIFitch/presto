@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.common.type;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.common.type.encoding.Base32;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -31,6 +34,7 @@ import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toMap;
 
+@ThriftStruct
 public class VarcharEnumType
         extends AbstractVarcharType
         implements EnumType<String>
@@ -74,6 +78,7 @@ public class VarcharEnumType
         private final Map<String, String> flippedEnumMap;
 
         @JsonCreator
+        @ThriftConstructor
         public VarcharEnumMap(@JsonProperty("typeName") String typeName, @JsonProperty("enumMap") Map<String, String> enumMap)
         {
             validateEnumMap(requireNonNull(enumMap, "enumMap is null"));
@@ -84,12 +89,14 @@ public class VarcharEnumType
         }
 
         @JsonProperty
+        @ThriftField(1)
         public String getTypeName()
         {
             return typeName;
         }
 
         @JsonProperty
+        @ThriftField(2)
         public Map<String, String> getEnumMap()
         {
             return enumMap;
