@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.tpch;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.spi.ConnectorTableHandle;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -22,6 +25,7 @@ import java.util.Objects;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
+@ThriftStruct
 public class TpchTableHandle
         implements ConnectorTableHandle
 {
@@ -29,6 +33,7 @@ public class TpchTableHandle
     private final double scaleFactor;
 
     @JsonCreator
+    @ThriftConstructor
     public TpchTableHandle(@JsonProperty("tableName") String tableName, @JsonProperty("scaleFactor") double scaleFactor)
     {
         this.tableName = requireNonNull(tableName, "tableName is null");
@@ -37,12 +42,14 @@ public class TpchTableHandle
     }
 
     @JsonProperty
+    @ThriftField(1)
     public String getTableName()
     {
         return tableName;
     }
 
     @JsonProperty
+    @ThriftField(2)
     public double getScaleFactor()
     {
         return scaleFactor;
