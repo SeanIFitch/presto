@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.accumulo.model;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.accumulo.serializers.AccumuloRowSerializer;
 import com.facebook.presto.spi.ConnectorInsertTableHandle;
 import com.facebook.presto.spi.ConnectorOutputTableHandle;
@@ -30,6 +33,7 @@ import static com.facebook.presto.spi.StandardErrorCode.NOT_FOUND;
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
 
+@ThriftStruct
 public final class AccumuloTableHandle
         implements ConnectorInsertTableHandle, ConnectorOutputTableHandle, ConnectorTableHandle
 {
@@ -42,6 +46,7 @@ public final class AccumuloTableHandle
     private final String table;
 
     @JsonCreator
+    @ThriftConstructor
     public AccumuloTableHandle(
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("schema") String schema,
@@ -61,30 +66,35 @@ public final class AccumuloTableHandle
     }
 
     @JsonProperty
+    @ThriftField(1)
     public String getConnectorId()
     {
         return connectorId;
     }
 
     @JsonProperty
+    @ThriftField(2)
     public String getRowId()
     {
         return rowId;
     }
 
     @JsonProperty
+    @ThriftField(3)
     public Optional<String> getScanAuthorizations()
     {
         return scanAuthorizations;
     }
 
     @JsonProperty
+    @ThriftField(4)
     public String getSchema()
     {
         return schema;
     }
 
     @JsonProperty
+    @ThriftField(5)
     public String getSerializerClassName()
     {
         return serializerClassName;
@@ -102,12 +112,14 @@ public final class AccumuloTableHandle
     }
 
     @JsonProperty
+    @ThriftField(6)
     public String getTable()
     {
         return table;
     }
 
     @JsonProperty
+    @ThriftField(7)
     public boolean isExternal()
     {
         return external;
