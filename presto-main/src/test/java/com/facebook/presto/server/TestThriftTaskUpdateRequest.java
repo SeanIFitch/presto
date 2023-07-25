@@ -85,6 +85,7 @@ public class TestThriftTaskUpdateRequest
     private static final ThriftCodec<TaskUpdateRequest> REFLECTION_READ_CODEC = REFLECTION_READ_CODEC_MANAGER.getCodec(TaskUpdateRequest.class);
     private static final ThriftCodec<TaskUpdateRequest> REFLECTION_WRITE_CODEC = REFLECTION_WRITE_CODEC_MANAGER.getCodec(TaskUpdateRequest.class);
     private static final TMemoryBuffer transport = new TMemoryBuffer(100 * 1024);
+    
     //Dummy values for fake TaskUpdateRequest
     private static final String FAKE_QUERY_ID = "FAKE_QUERY_ID";
     private static final Optional<TransactionId> FAKE_TRANSACTION_ID = Optional.of(TransactionId.create());
