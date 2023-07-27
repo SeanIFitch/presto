@@ -13,6 +13,8 @@
  */
 package com.facebook.presto.common.type;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.common.block.Block;
 import com.facebook.presto.common.block.BlockBuilder;
 import com.facebook.presto.common.function.SqlFunctionProperties;
@@ -22,12 +24,14 @@ import io.airlift.slice.Slice;
 import static com.facebook.presto.common.type.HyperLogLogType.HYPER_LOG_LOG;
 import static com.facebook.presto.common.type.TypeSignature.parseTypeSignature;
 
+@ThriftStruct
 public class P4HyperLogLogType
         extends AbstractVariableWidthType
 {
     public static final P4HyperLogLogType P4_HYPER_LOG_LOG = new P4HyperLogLogType();
 
     @JsonCreator
+    @ThriftConstructor
     public P4HyperLogLogType()
     {
         super(parseTypeSignature(StandardTypes.P4_HYPER_LOG_LOG), Slice.class);

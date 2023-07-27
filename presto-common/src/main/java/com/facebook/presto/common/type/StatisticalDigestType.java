@@ -13,6 +13,8 @@
  */
 package com.facebook.presto.common.type;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.common.block.Block;
 import com.facebook.presto.common.block.BlockBuilder;
 import com.facebook.presto.common.function.SqlFunctionProperties;
@@ -23,12 +25,14 @@ import java.util.List;
 
 import static java.util.Collections.singletonList;
 
+@ThriftStruct
 public abstract class StatisticalDigestType
         extends AbstractVariableWidthType
 {
     private final Type type;
 
     @JsonCreator
+    @ThriftConstructor
     public StatisticalDigestType(String name, Type type)
     {
         super(new TypeSignature(name, TypeSignatureParameter.of(type.getTypeSignature())), Slice.class);

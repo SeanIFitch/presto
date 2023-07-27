@@ -13,6 +13,8 @@
  */
 package com.facebook.presto.mongodb;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.common.block.Block;
 import com.facebook.presto.common.block.BlockBuilder;
 import com.facebook.presto.common.function.SqlFunctionProperties;
@@ -29,12 +31,14 @@ import java.io.IOException;
 
 import static com.facebook.presto.common.type.TypeSignature.parseTypeSignature;
 
+@ThriftStruct
 public class ObjectIdType
         extends AbstractVariableWidthType
 {
     public static final ObjectIdType OBJECT_ID = new ObjectIdType();
 
     @JsonCreator
+    @ThriftConstructor
     public ObjectIdType()
     {
         super(parseTypeSignature("ObjectId"), Slice.class);
