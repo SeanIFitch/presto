@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.common.predicate;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.common.function.SqlFunctionProperties;
 import com.facebook.presto.common.type.Type;
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -38,6 +41,8 @@ import static java.util.Objects.requireNonNull;
  * </ul>
  * <p>
  */
+
+@ThriftStruct
 public final class Domain
 {
     private final ValueSet values;
@@ -50,6 +55,7 @@ public final class Domain
     }
 
     @JsonCreator
+    @ThriftConstructor
     public static Domain create(
             @JsonProperty("values") ValueSet values,
             @JsonProperty("nullAllowed") boolean nullAllowed)
@@ -99,12 +105,14 @@ public final class Domain
     }
 
     @JsonProperty
+    @ThriftField(1)
     public ValueSet getValues()
     {
         return values;
     }
 
     @JsonProperty
+    @ThriftField(2)
     public boolean isNullAllowed()
     {
         return nullAllowed;
