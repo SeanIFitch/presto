@@ -34,7 +34,6 @@ import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toMap;
 
-@ThriftStruct
 public class VarcharEnumType
         extends AbstractVarcharType
         implements EnumType<String>
@@ -71,14 +70,15 @@ public class VarcharEnumType
         return enumMap.getTypeName();
     }
 
+    @ThriftStruct
     public static class VarcharEnumMap
     {
         private final String typeName;
         private final Map<String, String> enumMap;
         private final Map<String, String> flippedEnumMap;
 
-        @JsonCreator
         @ThriftConstructor
+        @JsonCreator
         public VarcharEnumMap(@JsonProperty("typeName") String typeName, @JsonProperty("enumMap") Map<String, String> enumMap)
         {
             validateEnumMap(requireNonNull(enumMap, "enumMap is null"));
@@ -88,15 +88,15 @@ public class VarcharEnumType
                     .collect(toMap(Map.Entry::getValue, Map.Entry::getKey));
         }
 
-        @JsonProperty
         @ThriftField(1)
+        @JsonProperty
         public String getTypeName()
         {
             return typeName;
         }
 
-        @JsonProperty
         @ThriftField(2)
+        @JsonProperty
         public Map<String, String> getEnumMap()
         {
             return enumMap;
