@@ -15,6 +15,7 @@ package com.facebook.presto.accumulo.model;
 
 import com.facebook.drift.annotations.ThriftConstructor;
 import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.accumulo.serializers.AccumuloRowSerializer;
 import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.HostAddress;
@@ -36,6 +37,7 @@ import static com.facebook.presto.spi.schedule.NodeSelectionStrategy.NO_PREFEREN
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
 
+@ThriftStruct
 public class AccumuloSplit
         implements ConnectorSplit
 {
