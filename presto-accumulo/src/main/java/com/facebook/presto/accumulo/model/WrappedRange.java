@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.accumulo.model;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.google.common.io.ByteArrayDataOutput;
@@ -22,6 +25,7 @@ import org.apache.accumulo.core.data.Range;
 import java.io.DataInput;
 import java.io.IOException;
 
+@ThriftStruct
 public class WrappedRange
 {
     private final Range range;
@@ -37,6 +41,7 @@ public class WrappedRange
     }
 
     @JsonValue
+    @ThriftField(1)
     public byte[] toBytes()
             throws IOException
     {
@@ -46,6 +51,7 @@ public class WrappedRange
     }
 
     @JsonCreator
+    @ThriftConstructor
     public static WrappedRange fromBytes(byte[] bytes)
             throws IOException
     {

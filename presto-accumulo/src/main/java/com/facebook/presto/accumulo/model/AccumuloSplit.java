@@ -13,6 +13,8 @@
  */
 package com.facebook.presto.accumulo.model;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
 import com.facebook.presto.accumulo.serializers.AccumuloRowSerializer;
 import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.HostAddress;
@@ -49,6 +51,7 @@ public class AccumuloSplit
     private final List<WrappedRange> ranges;
 
     @JsonCreator
+    @ThriftConstructor
     public AccumuloSplit(
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("schema") String schema,
@@ -80,30 +83,35 @@ public class AccumuloSplit
     }
 
     @JsonProperty
+    @ThriftField(1)
     public String getConnectorId()
     {
         return connectorId;
     }
 
     @JsonProperty
+    @ThriftField(2)
     public Optional<String> getHostPort()
     {
         return hostPort;
     }
 
     @JsonProperty
+    @ThriftField(3)
     public String getRowId()
     {
         return rowId;
     }
 
     @JsonProperty
+    @ThriftField(4)
     public String getSchema()
     {
         return schema;
     }
 
     @JsonProperty
+    @ThriftField(5)
     public String getTable()
     {
         return table;
@@ -116,12 +124,14 @@ public class AccumuloSplit
     }
 
     @JsonProperty
+    @ThriftField(6)
     public String getSerializerClassName()
     {
         return this.serializerClassName;
     }
 
     @JsonProperty("ranges")
+    @ThriftField(7)
     public List<WrappedRange> getWrappedRanges()
     {
         return ranges;
@@ -134,6 +144,7 @@ public class AccumuloSplit
     }
 
     @JsonProperty
+    @ThriftField(8)
     public List<AccumuloColumnConstraint> getConstraints()
     {
         return constraints;
@@ -152,6 +163,7 @@ public class AccumuloSplit
     }
 
     @JsonProperty
+    @ThriftField(9)
     public Optional<String> getScanAuthorizations()
     {
         return scanAuthorizations;
