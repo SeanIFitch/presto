@@ -21,8 +21,6 @@ import com.facebook.presto.spark.execution.http.PrestoSparkHttpTaskClient;
 import com.facebook.presto.spark.util.PrestoSparkStatsCollectionUtils;
 import com.facebook.presto.spi.PrestoException;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.airlift.units.Duration;
 
@@ -57,7 +55,6 @@ public class HttpNativeExecutionTaskInfoFetcher
     private final Executor executor;
     private final Duration infoFetchInterval;
     private final RequestErrorTracker errorTracker;
-    private final ScheduledExecutorService errorRetryScheduledExecutor;
     private final AtomicReference<RuntimeException> lastException = new AtomicReference<>();
     private final Duration maxErrorDuration;
     private final Object taskFinished;
@@ -78,7 +75,6 @@ public class HttpNativeExecutionTaskInfoFetcher
         this.updateScheduledExecutor = requireNonNull(updateScheduledExecutor, "updateScheduledExecutor is null");
         this.executor = requireNonNull(executor, "executor is null");
         this.infoFetchInterval = requireNonNull(infoFetchInterval, "infoFetchInterval is null");
-        this.errorRetryScheduledExecutor = requireNonNull(errorRetryScheduledExecutor, "errorRetryScheduledExecutor is null");
         this.maxErrorDuration = requireNonNull(maxErrorDuration, "maxErrorDuration is null");
         this.errorTracker = new RequestErrorTracker(
                 "NativeExecution",
@@ -86,7 +82,7 @@ public class HttpNativeExecutionTaskInfoFetcher
                 NATIVE_EXECUTION_TASK_ERROR,
                 TASK_ERROR_MESSAGE,
                 maxErrorDuration,
-                errorRetryScheduledExecutor,
+                requireNonNull(errorRetryScheduledExecutor, "errorRetryScheduledExecutor is null"),
                 "getting taskInfo from native process");
         this.taskFinished = requireNonNull(taskFinished, "taskFinished is null");
     }
@@ -108,62 +104,58 @@ public class HttpNativeExecutionTaskInfoFetcher
     void doGetTaskInfo()
     {
         try {
-            ListenableFuture<BaseResponse<TaskInfo>> taskInfoFuture = workerClient.getTaskInfo();
-            Futures.addCallback(
-                    taskInfoFuture,
-                    new FutureCallback<BaseResponse<TaskInfo>>()
-                    {
-                        @Override
-                        public void onSuccess(BaseResponse<TaskInfo> result)
-                        {
-                            log.debug("TaskInfoCallback success %s", result.getValue().getTaskId());
-                            taskInfo.set(result.getValue());
-
-                            // Update Spark Accumulators for spark internal metrics
-                            // Note: Updating here also serves as a heartbeat to spark scheduler
-                            // that the task is making progress
-                            PrestoSparkStatsCollectionUtils.collectMetrics(taskInfo.get());
-
-                            if (result.getValue().getTaskStatus().getState().isDone()) {
-                                synchronized (taskFinished) {
-                                    taskFinished.notifyAll();
-                                }
-                            }
-                        }
-
-                        @Override
-                        public void onFailure(Throwable t)
-                        {
-                            // record failure
-                            try {
-                                errorTracker.requestFailed(t);
-                            }
-                            catch (PrestoException e) {
-                                // Entering here means that we are unable
-                                // to get any task info from the CPP process
-                                // likely because process has crashed
-                                stop();
-                                lastException.set(e);
-                                synchronized (taskFinished) {
-                                    taskFinished.notifyAll();
-                                }
-                                return;
-                            }
-                            ListenableFuture<?> errorRateLimit = errorTracker.acquireRequestPermit();
-                            try {
-                                // synchronously wait on throttling
-                                errorRateLimit.get(maxErrorDuration.toMillis(), TimeUnit.MILLISECONDS);
-                            }
-                            catch (InterruptedException | ExecutionException | TimeoutException e) {
-                                // throttling error is not fatal, just log the error.
-                                log.debug(e.getMessage());
-                            }
-                        }
-                    },
-                    executor);
+            BaseResponse<TaskInfo> response = workerClient.getTaskInfo().get();
+            onSuccess(response);
         }
         catch (Throwable t) {
-            throw t;
+            onFailure(t);
+        }
+    }
+
+    private void onSuccess(BaseResponse<TaskInfo> result)
+    {
+        log.debug("TaskInfoCallback success %s", result.getValue().getTaskId());
+        taskInfo.set(result.getValue());
+
+        errorTracker.requestSucceeded();
+
+        // Update Spark Accumulators for spark internal metrics
+        // Note: Updating here also serves as a heartbeat to spark scheduler
+        // that the task is making progress
+        PrestoSparkStatsCollectionUtils.collectMetrics(taskInfo.get());
+
+        if (result.getValue().getTaskStatus().getState().isDone()) {
+            synchronized (taskFinished) {
+                taskFinished.notifyAll();
+            }
+        }
+    }
+
+    private void onFailure(Throwable t)
+    {
+        // record failure
+        try {
+            errorTracker.requestFailed(t);
+        }
+        catch (PrestoException e) {
+            // Entering here means that we are unable
+            // to get any task info from the CPP process
+            // likely because process has crashed
+            stop();
+            lastException.set(e);
+            synchronized (taskFinished) {
+                taskFinished.notifyAll();
+            }
+            return;
+        }
+        ListenableFuture<?> errorRateLimit = errorTracker.acquireRequestPermit();
+        try {
+            // synchronously wait on throttling
+            errorRateLimit.get(maxErrorDuration.toMillis(), TimeUnit.MILLISECONDS);
+        }
+        catch (InterruptedException | ExecutionException | TimeoutException e) {
+            // throttling error is not fatal, just log the error.
+            log.debug(e.getMessage());
         }
     }
 

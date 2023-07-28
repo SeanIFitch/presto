@@ -50,6 +50,8 @@ static void maybeSetupTaskSpillDirectory(
     const core::PlanFragment& planFragment,
     exec::Task& execTask) {
   const auto baseSpillPath = SystemConfig::instance()->spillerSpillPath();
+  const auto includeNodeInSpillPath =
+      SystemConfig::instance()->includeNodeInSpillPath();
   auto nodeConfig = NodeConfig::instance();
   if (baseSpillPath.hasValue() &&
       planFragment.canSpill(execTask.queryCtx()->queryConfig())) {
@@ -58,7 +60,8 @@ static void maybeSetupTaskSpillDirectory(
         nodeConfig->nodeIp(),
         nodeConfig->nodeId(),
         execTask.queryCtx()->queryId(),
-        execTask.taskId());
+        execTask.taskId(),
+        includeNodeInSpillPath);
     execTask.setSpillDirectory(taskSpillDirPath);
     // Create folder for the task spilling.
     auto fileSystem =
@@ -210,7 +213,8 @@ std::unique_ptr<TaskInfo> TaskManager::createOrUpdateErrorTask(
     const std::string& nodeIp,
     const std::string& nodeId,
     const std::string& queryId,
-    const protocol::TaskId& taskId) {
+    const protocol::TaskId& taskId,
+    bool includeNodeInSpillPath) {
   // Generate 'YYYY-MM-DD' from the query ID, which starts with 'YYYYMMDD'.
   // In case query id is malformed (should not be the case in production) we
   // fall back to the predefined date.
@@ -222,13 +226,15 @@ std::unique_ptr<TaskInfo> TaskManager::createOrUpdateErrorTask(
             queryId.substr(6, 2))
       : "1970-01-01";
 
-  std::stringstream ss;
-  ss << baseSpillPath << "/" << nodeIp << "_" << nodeId << "/" << dateString
-     << "/";
-  // TODO(spershin): We will like need to use identity (from config?) in the
-  // long run. Use 'presto_native' for now.
-  ss << "presto_native/" << queryId << "/" << taskId << "/";
-  return ss.str();
+  std::string path;
+  folly::toAppend(fmt::format("{}/", baseSpillPath), &path);
+  if (includeNodeInSpillPath) {
+    folly::toAppend(fmt::format("{}_{}/", nodeIp, nodeId), &path);
+  }
+  folly::toAppend(
+      fmt::format("{}/presto_native/{}/{}/", dateString, queryId, taskId),
+      &path);
+  return path;
 }
 
 void TaskManager::getDataForResultRequests(
@@ -391,10 +397,10 @@ std::unique_ptr<TaskInfo> TaskManager::createOrUpdateTask(
 
   getDataForResultRequests(resultRequests);
 
-  if (outputBuffers.type == protocol::BufferType::BROADCAST &&
+  if (outputBuffers.type != protocol::BufferType::PARTITIONED &&
       !execTask->updateOutputBuffers(
           outputBuffers.buffers.size(), outputBuffers.noMoreBufferIds)) {
-    LOG(INFO) << "Failed to update broadcast buffers for task: " << taskId;
+    LOG(WARNING) << "Failed to update output buffers for task: " << taskId;
   }
 
   for (const auto& source : sources) {
@@ -927,7 +933,6 @@ std::shared_ptr<PrestoTask> TaskManager::findOrCreateTaskLocked(
   prestoTask->info.taskStatus.state = protocol::TaskState::RUNNING;
   prestoTask->info.taskStatus.self =
       fmt::format("{}/v1/task/{}", baseUri_, taskId);
-  prestoTask->info.taskStatus.outputBufferUtilization = 1;
   prestoTask->updateHeartbeatLocked();
   ++prestoTask->info.taskStatus.version;
 

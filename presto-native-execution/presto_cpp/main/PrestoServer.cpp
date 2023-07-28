@@ -359,12 +359,13 @@ void PrestoServer::run() {
   }
 
   auto memoryAllocator = velox::memory::MemoryAllocator::getInstance();
+  auto asyncDataCache = cache::AsyncDataCache::getInstance();
   periodicTaskManager_ = std::make_unique<PeriodicTaskManager>(
       driverCPUExecutor(),
       httpServer_->getExecutor(),
       taskManager_.get(),
       memoryAllocator,
-      dynamic_cast<const velox::cache::AsyncDataCache* const>(memoryAllocator),
+      asyncDataCache,
       velox::connector::getAllConnectors());
   addServerPeriodicTasks();
   addAdditionalPeriodicTasks();
@@ -434,6 +435,9 @@ void PrestoServer::run() {
         << "': threads: " << pGlobalIOExecutor->numActiveThreads() << "/"
         << pGlobalIOExecutor->numThreads();
   }
+
+  PRESTO_SHUTDOWN_LOG(INFO) << "Release resources in AsyncDataCache";
+  cache_->prepareShutdown();
 }
 
 void PrestoServer::yieldTasks() {
@@ -492,9 +496,8 @@ void PrestoServer::initializeVeloxMemory() {
           asyncCacheSsdCheckpointGb << 30,
           asyncCacheSsdDisableFileCow);
     }
-    cache_ = std::make_shared<cache::AsyncDataCache>(
-        allocator_, memoryBytes, std::move(ssd));
-    allocator_ = cache_;
+    cache_ = cache::AsyncDataCache::create(allocator_.get(), std::move(ssd));
+    cache::AsyncDataCache::setInstance(cache_.get());
   } else {
     VELOX_CHECK_EQ(
         systemConfig->asyncCacheSsdGb(),
@@ -508,13 +511,11 @@ void PrestoServer::initializeVeloxMemory() {
   options.capacity = memoryBytes;
   options.checkUsageLeak = systemConfig->enableMemoryLeakCheck();
   if (systemConfig->enableMemoryArbitration()) {
-    auto& arbitratorCfg = options.arbitratorConfig;
-    arbitratorCfg.kind = memory::MemoryArbitrator::Kind::kShared;
-    arbitratorCfg.capacity =
+    options.arbitratorKind = memory::MemoryArbitrator::Kind::kShared;
+    options.capacity =
         memoryBytes * 100 / systemConfig->reservedMemoryPoolCapacityPct();
-    arbitratorCfg.initMemoryPoolCapacity =
-        systemConfig->memoryPoolInitCapacity();
-    arbitratorCfg.minMemoryPoolCapacityTransferSize =
+    options.memoryPoolInitCapacity = systemConfig->memoryPoolInitCapacity();
+    options.memoryPoolTransferCapacity =
         systemConfig->memoryPoolTransferCapacity();
   }
   const auto& manager = memory::MemoryManager::getInstance(options, true);

@@ -2324,10 +2324,15 @@ VeloxQueryPlanConverterBase::toVeloxQueryPlan(
     limit = *node->maxRowCountPerPartition;
   }
 
+  std::optional<std::string> rowNumberColumnName;
+  if (!node->partial) {
+    rowNumberColumnName = node->rowNumberVariable.name;
+  }
+
   return std::make_shared<core::RowNumberNode>(
       node->id,
       partitionFields,
-      node->rowNumberVariable.name,
+      rowNumberColumnName,
       limit,
       toVeloxQueryPlan(node->source, tableWriteInfo, taskId));
 }
@@ -2458,6 +2463,17 @@ core::PlanNodePtr VeloxQueryPlanConverterBase::toVeloxQueryPlan(
           std::dynamic_pointer_cast<const protocol::MarkDistinctNode>(node)) {
     return toVeloxQueryPlan(markDistinct, tableWriteInfo, taskId);
   }
+  if (auto sampleNode =
+          std::dynamic_pointer_cast<const protocol::SampleNode>(node)) {
+    // SampleNode (used for System TABLESAMPLE) is a no-op at this layer.
+    // SYSTEM Tablesample is implemented by sampling when generating splits
+    // since it skips in units of logical segments of data.
+    // The sampled splits are correctly passed to the TableScanNode which
+    // is the source of this SampleNode.
+    // BERNOULLI sampling is implemented as a filter on the TableScan directly,
+    // and does not have the intermediate SampleNode.
+    return toVeloxQueryPlan(sampleNode->source, tableWriteInfo, taskId);
+  }
   VELOX_UNSUPPORTED("Unknown plan node type {}", node->_type);
 }
 
@@ -2563,9 +2579,9 @@ core::PlanFragment VeloxQueryPlanConverterBase::toVeloxQueryPlan(
             planFragment.planNode =
                 std::make_shared<core::PartitionedOutputNode>(
                     "root",
+                    core::PartitionedOutputNode::Kind::kPartitioned,
                     partitioningKeys,
                     numPartitions,
-                    core::PartitionedOutputNode::Kind::kPartitioned,
                     partitioningScheme.replicateNullsAndAny,
                     std::make_shared<RoundRobinPartitionFunctionSpec>(),
                     outputType,
@@ -2583,9 +2599,9 @@ core::PlanFragment VeloxQueryPlanConverterBase::toVeloxQueryPlan(
             planFragment.planNode =
                 std::make_shared<core::PartitionedOutputNode>(
                     "root",
+                    core::PartitionedOutputNode::Kind::kPartitioned,
                     partitioningKeys,
                     numPartitions,
-                    core::PartitionedOutputNode::Kind::kPartitioned,
                     partitioningScheme.replicateNullsAndAny,
                     std::make_shared<HashPartitionFunctionSpec>(
                         inputType, keyChannels, constValues),
@@ -2604,8 +2620,20 @@ core::PlanFragment VeloxQueryPlanConverterBase::toVeloxQueryPlan(
                 toJsonString(systemPartitioningHandle->function));
         }
       }
+      case protocol::SystemPartitioning::SCALED: {
+        VELOX_CHECK(
+            systemPartitioningHandle->function ==
+                protocol::SystemPartitionFunction::ROUND_ROBIN,
+            "Unsupported partitioning function: {}",
+            toJsonString(systemPartitioningHandle->function));
+        planFragment.planNode = core::PartitionedOutputNode::arbitrary(
+            "root", std::move(outputType), std::move(sourceNode));
+        return planFragment;
+      }
       default:
-        VELOX_FAIL("Unsupported kind of SystemPartitioning");
+        VELOX_FAIL(
+            "Unsupported kind of SystemPartitioning: {}",
+            toJsonString(systemPartitioningHandle->partitioning));
     }
   }
 
@@ -2631,9 +2659,9 @@ core::PlanFragment VeloxQueryPlanConverterBase::toVeloxQueryPlan(
 
     planFragment.planNode = std::make_shared<core::PartitionedOutputNode>(
         "root",
+        core::PartitionedOutputNode::Kind::kPartitioned,
         partitioningKeys,
         numPartitions,
-        core::PartitionedOutputNode::Kind::kPartitioned,
         partitioningScheme.replicateNullsAndAny,
         std::make_shared<HivePartitionFunctionSpec>(
             hivePartitioningHandle->bucketCount,
