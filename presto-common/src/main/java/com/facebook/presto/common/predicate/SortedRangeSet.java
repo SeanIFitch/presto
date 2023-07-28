@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.common.predicate;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.common.function.SqlFunctionProperties;
 import com.facebook.presto.common.type.Type;
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -45,6 +48,8 @@ import static java.util.stream.Collectors.toMap;
  * allows iteration across these compacted Ranges in increasing order, as well as other common
  * set-related operation.
  */
+
+@ThriftStruct
 public final class SortedRangeSet
         implements ValueSet
 {
@@ -116,6 +121,7 @@ public final class SortedRangeSet
     }
 
     @JsonCreator
+    @ThriftConstructor
     public static SortedRangeSet copyOf(
             @JsonProperty("type") Type type,
             @JsonProperty("ranges") List<Range> ranges)
@@ -125,12 +131,14 @@ public final class SortedRangeSet
 
     @Override
     @JsonProperty
+    @ThriftField(1)
     public Type getType()
     {
         return type;
     }
 
     @JsonProperty("ranges")
+    @ThriftField(2)
     public List<Range> getOrderedRanges()
     {
         return new ArrayList<>(lowIndexedRanges.values());
