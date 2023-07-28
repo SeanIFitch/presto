@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.accumulo.model;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.common.predicate.Domain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -23,6 +26,7 @@ import java.util.Optional;
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
 
+@ThriftStruct
 public class AccumuloColumnConstraint
 {
     private final String name;
@@ -32,6 +36,7 @@ public class AccumuloColumnConstraint
     private final Optional<Domain> domain;
 
     @JsonCreator
+    @ThriftConstructor
     public AccumuloColumnConstraint(
             @JsonProperty("name") String name,
             @JsonProperty("family") String family,
@@ -47,30 +52,35 @@ public class AccumuloColumnConstraint
     }
 
     @JsonProperty
+    @ThriftField(1)
     public boolean isIndexed()
     {
         return indexed;
     }
 
     @JsonProperty
+    @ThriftField(2)
     public String getName()
     {
         return name;
     }
 
     @JsonProperty
+    @ThriftField(3)
     public String getFamily()
     {
         return family;
     }
 
     @JsonProperty
+    @ThriftField(4)
     public String getQualifier()
     {
         return qualifier;
     }
 
     @JsonProperty
+    @ThriftField(5)
     public Optional<Domain> getDomain()
     {
         return domain;
