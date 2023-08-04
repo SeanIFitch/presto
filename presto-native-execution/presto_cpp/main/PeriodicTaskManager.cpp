@@ -20,6 +20,7 @@
 #include "presto_cpp/main/common/Counters.h"
 #include "velox/common/base/StatsReporter.h"
 #include "velox/common/caching/AsyncDataCache.h"
+#include "velox/common/caching/SsdFile.h"
 #include "velox/common/memory/MemoryAllocator.h"
 #include "velox/common/memory/MmapAllocator.h"
 #include "velox/connectors/hive/HiveConnector.h"
@@ -240,37 +241,12 @@ void PeriodicTaskManager::updateCacheStats() {
       kCounterMemoryCacheTotalPrefetchBytes, memoryCacheStats.prefetchBytes);
   REPORT_ADD_STAT_VALUE(
       kCounterMemoryCacheSumEvictScore, memoryCacheStats.sumEvictScore);
-
-  // Interval cumulatives.
-  REPORT_ADD_STAT_VALUE(
-      kCounterMemoryCacheNumHit,
-      memoryCacheStats.numHit - lastMemoryCacheHits_);
-  REPORT_ADD_STAT_VALUE(
-      kCounterMemoryCacheNumNew,
-      memoryCacheStats.numNew - lastMemoryCacheInserts_);
-  REPORT_ADD_STAT_VALUE(
-      kCounterMemoryCacheNumEvict,
-      memoryCacheStats.numEvict - lastMemoryCacheEvictions_);
-  REPORT_ADD_STAT_VALUE(
-      kCounterMemoryCacheNumEvictChecks,
-      memoryCacheStats.numEvictChecks - lastMemoryCacheEvictionChecks_);
-  REPORT_ADD_STAT_VALUE(
-      kCounterMemoryCacheNumWaitExclusive,
-      memoryCacheStats.numWaitExclusive - lastMemoryCacheStalls_);
-  REPORT_ADD_STAT_VALUE(
-      kCounterMemoryCacheNumAllocClocks,
-      memoryCacheStats.allocClocks - lastMemoryCacheAllocClocks_);
-
-  lastMemoryCacheHits_ = memoryCacheStats.numHit;
-  lastMemoryCacheInserts_ = memoryCacheStats.numNew;
-  lastMemoryCacheEvictions_ = memoryCacheStats.numEvict;
-  lastMemoryCacheEvictionChecks_ = memoryCacheStats.numEvictChecks;
-  lastMemoryCacheStalls_ = memoryCacheStats.numWaitExclusive;
-  lastMemoryCacheAllocClocks_ = memoryCacheStats.allocClocks;
-
+  
   // All time cumulatives.
   REPORT_ADD_STAT_VALUE(
       kCounterMemoryCacheNumCumulativeHit, memoryCacheStats.numHit);
+  REPORT_ADD_STAT_VALUE(
+      kCounterMemoryCacheCumulativeHitBytes, memoryCacheStats.hitBytes);
   REPORT_ADD_STAT_VALUE(
       kCounterMemoryCacheNumCumulativeNew, memoryCacheStats.numNew);
   REPORT_ADD_STAT_VALUE(

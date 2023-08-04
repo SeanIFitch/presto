@@ -77,6 +77,7 @@ public abstract class AbstractTestNativeGeneralQueries
 
         Session session = Session.builder(getSession())
                 .setCatalog("hivecached")
+                .setCatalogSessionProperty("hivecached", "orc_compression_codec", "ZSTD")
                 .setCatalogSessionProperty("hivecached", "collect_column_statistics_on_write", "false")
                 .build();
         try {
@@ -252,6 +253,7 @@ public abstract class AbstractTestNativeGeneralQueries
 
         Session session = Session.builder(getSession())
                 .setCatalogSessionProperty("hive", "parquet_pushdown_filter_enabled", "true")
+                .setCatalogSessionProperty("hive", "orc_compression_codec", "ZSTD")
                 .build();
 
         try {
@@ -381,6 +383,13 @@ public abstract class AbstractTestNativeGeneralQueries
         // Round-trip tests of casts for Json.
         assertQuery("SELECT cast(cast(name as JSON) as VARCHAR), cast(cast(size as JSON) as INTEGER), cast(cast(size + 0.01 as JSON) as DOUBLE), cast(cast(size > 5 as JSON) as BOOLEAN) FROM part");
         assertQuery("SELECT cast(cast(array[suppkey, nationkey] as JSON) as ARRAY(INTEGER)), cast(cast(map(array[name, address, phone], array[1.1, 2.2, 3.3]) as JSON) as MAP(VARCHAR(40), DOUBLE)), cast(cast(map(array[name], array[phone]) as JSON) as MAP(VARCHAR(25), JSON)), cast(cast(array[array[suppkey], array[nationkey]] as JSON) as ARRAY(JSON)) from supplier");
+
+        // Cast from date to timestamp
+        assertQuery("SELECT CAST(date(shipdate) AS timestamp) FROM lineitem");
+        Session session = Session.builder(getSession())
+                .setSystemProperty("legacy_timestamp", "false")
+                .build();
+        assertQuery(session, "SELECT CAST(date(shipdate) AS timestamp) FROM lineitem");
     }
 
     @Test
@@ -917,7 +926,7 @@ public abstract class AbstractTestNativeGeneralQueries
         String tmpTableName = generateRandomTableName();
         String[] unsupportedTableFormats = {"ORC", "JSON"};
         for (String unsupportedTableFormat : unsupportedTableFormats) {
-            assertQueryFails(String.format("CREATE TABLE %s WITH (format = '" + unsupportedTableFormat + "') AS SELECT * FROM nation", tmpTableName), " Unsupported file format: \"" + unsupportedTableFormat + "\".");
+            assertQueryFails(String.format("CREATE TABLE %s WITH (format = '" + unsupportedTableFormat + "') AS SELECT * FROM nation", tmpTableName), " Unsupported file format in TableWrite: \"" + unsupportedTableFormat + "\".");
         }
     }
 
@@ -989,12 +998,11 @@ public abstract class AbstractTestNativeGeneralQueries
     {
         // Generate temporary table name.
         String tmpTableName = generateRandomTableName();
+        Session writeSession = buildSessionForTableWrite();
 
         try {
-            getQueryRunner().execute(getSession(), String.format("CREATE TABLE %s (name VARCHAR, regionkey BIGINT, nationkey BIGINT) WITH (partitioned_by = ARRAY['regionkey','nationkey'])", tmpTableName));
-
+            getQueryRunner().execute(writeSession, String.format("CREATE TABLE %s (name VARCHAR, regionkey BIGINT, nationkey BIGINT) WITH (partitioned_by = ARRAY['regionkey','nationkey'])", tmpTableName));
             // Test insert into an empty table.
-            Session writeSession = buildSessionForTableWrite();
             getQueryRunner().execute(writeSession, String.format("INSERT INTO %s SELECT name, regionkey, nationkey FROM nation", tmpTableName));
             assertQuery(String.format("SELECT * FROM %s", tmpTableName), "SELECT name, regionkey, nationkey FROM nation");
 
@@ -1017,11 +1025,11 @@ public abstract class AbstractTestNativeGeneralQueries
     @Test
     public void testInsertIntoSpecialPartitionName()
     {
+        Session writeSession = buildSessionForTableWrite();
         // Generate temporary table name.
         String tmpTableName = generateRandomTableName();
         try {
-            getQueryRunner().execute(getSession(), String.format("CREATE TABLE %s (name VARCHAR, nationkey VARCHAR) WITH (partitioned_by = ARRAY['nationkey'])", tmpTableName));
-            Session writeSession = buildSessionForTableWrite();
+            getQueryRunner().execute(writeSession, String.format("CREATE TABLE %s (name VARCHAR, nationkey VARCHAR) WITH (partitioned_by = ARRAY['nationkey'])", tmpTableName));
 
             // For special character in partition name, without correct handling, it would throw errors like 'Invalid partition spec: nationkey=A/B'
             // In this test, verify those partition names can be successfully created
@@ -1091,6 +1099,7 @@ public abstract class AbstractTestNativeGeneralQueries
                 .setSystemProperty("task_partitioned_writer_count", "2")
                 .setCatalogSessionProperty("hive", "collect_column_statistics_on_write", "false")
                 .setCatalogSessionProperty("hive", "optimized_partition_update_serialization_enabled", "false")
+                .setCatalogSessionProperty("hive", "orc_compression_codec", "ZSTD")
                 .build();
     }
 
@@ -1131,7 +1140,6 @@ public abstract class AbstractTestNativeGeneralQueries
         assertQuery("SELECT ln(totalprice) FROM orders");
         assertQuery("SELECT sqrt(totalprice) FROM orders");
         assertQuery("SELECT radians(totalprice) FROM orders");
-        assertQuery("SELECT beta_cdf(nationkey, 0.2, 0.2) from nation where nationkey > 0");
     }
 
     @Test

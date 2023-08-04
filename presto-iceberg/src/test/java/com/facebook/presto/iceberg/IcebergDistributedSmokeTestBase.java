@@ -790,4 +790,46 @@ public class IcebergDistributedSmokeTestBase
 
         dropTable(session, tableName);
     }
+
+    @Test
+    public void testPartitionedByRealWithNaNInf()
+    {
+        Session session = getSession();
+        String tableName = "test_partitioned_by_real";
+
+        assertUpdate("CREATE TABLE " + tableName + " (id integer, part real) WITH(partitioning = ARRAY['part'])");
+        assertUpdate("INSERT INTO " + tableName + " VALUES (1, real 'NaN')", 1);
+        assertUpdate("INSERT INTO " + tableName + " VALUES (2, real 'Infinity')", 1);
+        assertUpdate("INSERT INTO " + tableName + " VALUES (3, real '-Infinity')", 1);
+
+        assertQuery("SELECT part FROM " + tableName + " WHERE id = 1", "VALUES cast('NaN' as real)");
+        assertQuery("SELECT part FROM " + tableName + " WHERE id = 2", "VALUES cast('Infinity' as real)");
+        assertQuery("SELECT part FROM " + tableName + " WHERE id = 3", "VALUES cast('-Infinity' as real)");
+
+        assertQuery("SELECT id FROM " + tableName + " WHERE is_nan(part)", "VALUES 1");
+        assertQuery("SELECT id FROM " + tableName + " WHERE is_infinite(part) ORDER BY id", "VALUES (2),(3)");
+
+        dropTable(session, tableName);
+    }
+
+    @Test
+    public void testPartitionedByDoubleWithNaNInf()
+    {
+        Session session = getSession();
+        String tableName = "test_partitioned_by_double";
+
+        assertUpdate("CREATE TABLE " + tableName + " (id integer, part double) WITH(partitioning = ARRAY['part'])");
+        assertUpdate("INSERT INTO " + tableName + " VALUES (1, double 'NaN')", 1);
+        assertUpdate("INSERT INTO " + tableName + " VALUES (2, double 'Infinity')", 1);
+        assertUpdate("INSERT INTO " + tableName + " VALUES (3, double '-Infinity')", 1);
+
+        assertQuery("SELECT part FROM " + tableName + " WHERE id = 1", "VALUES cast('NaN' as double)");
+        assertQuery("SELECT part FROM " + tableName + " WHERE id = 2", "VALUES cast('Infinity' as double)");
+        assertQuery("SELECT part FROM " + tableName + " WHERE id = 3", "VALUES cast('-Infinity' as double)");
+
+        assertQuery("SELECT id FROM " + tableName + " WHERE is_nan(part)", "VALUES 1");
+        assertQuery("SELECT id FROM " + tableName + " WHERE is_infinite(part) ORDER BY id", "VALUES (2),(3)");
+
+        dropTable(session, tableName);
+    }
 }
