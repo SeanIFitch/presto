@@ -13,10 +13,23 @@
  */
 package com.facebook.presto.plugin.prometheus;
 
+import com.facebook.drift.annotations.ThriftEnum;
+import com.facebook.drift.annotations.ThriftEnumValue;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
 
+@ThriftEnum
 public enum PrometheusTransactionHandle
         implements ConnectorTransactionHandle
 {
-    INSTANCE
+    INSTANCE(1);
+
+    private final int value;
+
+    PrometheusTransactionHandle(int value) { this.value = value; }
+
+    @ThriftEnumValue
+    public int getValue()
+    {
+        return value;
+    }
 }

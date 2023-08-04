@@ -72,12 +72,13 @@ public class TaskUpdateRequest
     //This constructor is for testing purposes only and will soon be deprecated
     @ThriftConstructor
     public TaskUpdateRequest(
-            @JsonProperty("session") SessionRepresentation session,
-            @JsonProperty("extraCredentials") Map<String, String> extraCredentials,
-            @JsonProperty("fragment") Optional<byte[]> fragment
-    )
+            SessionRepresentation session,
+            Map<String, String> extraCredentials,
+            Optional<byte[]> fragment,
+            List<TaskSource> sources)
+
     {
-        this(session, extraCredentials, fragment, ImmutableList.of(), OutputBuffers.createInitialEmptyOutputBuffers(ARBITRARY), Optional.empty());
+        this(session, extraCredentials, fragment, sources, OutputBuffers.createInitialEmptyOutputBuffers(ARBITRARY), Optional.empty());
     }
 
     @JsonProperty
@@ -103,6 +104,7 @@ public class TaskUpdateRequest
     }
 
     @JsonProperty
+    @ThriftField(4)
     public List<TaskSource> getSources()
     {
         return sources;

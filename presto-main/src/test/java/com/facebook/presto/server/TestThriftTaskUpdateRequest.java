@@ -22,16 +22,37 @@ import com.facebook.drift.codec.utils.DataSizeToBytesThriftCodec;
 import com.facebook.drift.codec.utils.DurationToMillisThriftCodec;
 import com.facebook.drift.codec.utils.LocaleToLanguageTagCodec;
 import com.facebook.drift.codec.utils.UuidToLeachSalzBinaryEncodingThriftCodec;
-import com.facebook.drift.protocol.*;
+import com.facebook.drift.protocol.TBinaryProtocol;
+import com.facebook.drift.protocol.TCompactProtocol;
+import com.facebook.drift.protocol.TFacebookCompactProtocol;
+import com.facebook.drift.protocol.TMemoryBuffer;
+import com.facebook.drift.protocol.TProtocol;
+import com.facebook.drift.protocol.TTransport;
 import com.facebook.presto.SessionRepresentation;
 import com.facebook.presto.common.QualifiedObjectName;
 import com.facebook.presto.common.transaction.TransactionId;
 import com.facebook.presto.common.type.TimeZoneKey;
 import com.facebook.presto.common.type.TypeSignature;
-import com.facebook.presto.spi.*;
-import com.facebook.presto.spi.function.*;
+import com.facebook.presto.execution.Lifespan;
+import com.facebook.presto.execution.ScheduledSplit;
+import com.facebook.presto.execution.TaskSource;
+import com.facebook.presto.execution.TestSqlTaskExecution;
+import com.facebook.presto.metadata.Split;
+import com.facebook.presto.spi.ConnectorId;
+import com.facebook.presto.spi.SplitContext;
+import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
+import com.facebook.presto.spi.function.FunctionKind;
+import com.facebook.presto.spi.function.LongVariableConstraint;
+import com.facebook.presto.spi.function.Parameter;
+import com.facebook.presto.spi.function.RoutineCharacteristics;
+import com.facebook.presto.spi.function.Signature;
+import com.facebook.presto.spi.function.SqlFunctionId;
+import com.facebook.presto.spi.function.SqlInvokedFunction;
+import com.facebook.presto.spi.function.TypeVariableConstraint;
+import com.facebook.presto.spi.plan.PlanNodeId;
 import com.facebook.presto.spi.security.SelectedRole;
 import com.facebook.presto.spi.session.ResourceEstimates;
+import com.facebook.presto.testing.TestingTransactionHandle;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -41,11 +62,18 @@ import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-import static org.testng.Assert.*;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertTrue;
 
 @Test(singleThreaded = true)
 public class TestThriftTaskUpdateRequest
@@ -89,14 +117,14 @@ public class TestThriftTaskUpdateRequest
     private static final Optional<Duration> FAKE_CPU_TIME = Optional.of(new Duration(44279L, TimeUnit.NANOSECONDS));
     private static final Optional<DataSize> FAKE_PEAK_MEMORY = Optional.of(new DataSize(135513L, DataSize.Unit.BYTE));
     private static final Optional<DataSize> FAKE_PEAK_TASK_MEMORY = Optional.of(new DataSize(1313L, DataSize.Unit.MEGABYTE));
-    private static final Map<String, String> FAKE_SYSTEM_PROPERTIES = ImmutableMap.of("FAKE_KEY","FAKE_VALUE");
-    private static final ConnectorId FAKE_CATALOG_KEY = new ConnectorId("FAKE_CATALOG_NAME");
-    private static final Map<String, String> FAKE_CATALOG_VALUE = ImmutableMap.of("FAKE_KEY","FAKE_VALUE");
-    private static final Map<ConnectorId, Map<String, String>> FAKE_CATALOG_PROPERTIES = ImmutableMap.of(FAKE_CATALOG_KEY, FAKE_CATALOG_VALUE);
+    private static final Map<String, String> FAKE_SYSTEM_PROPERTIES = ImmutableMap.of("FAKE_KEY", "FAKE_VALUE");
+    private static final ConnectorId FAKE_CONNECTOR_ID = new ConnectorId("FAKE_CATALOG_NAME");
+    private static final Map<String, String> FAKE_CATALOG_VALUE = ImmutableMap.of("FAKE_KEY", "FAKE_VALUE");
+    private static final Map<ConnectorId, Map<String, String>> FAKE_CATALOG_PROPERTIES = ImmutableMap.of(FAKE_CONNECTOR_ID, FAKE_CATALOG_VALUE);
     private static final Map<String, Map<String, String>> FAKE_UNPROCESSED_CATALOG_PROPERTIES = ImmutableMap.of("FAKE_NAME", FAKE_CATALOG_VALUE);
     private static final SelectedRole FAKE_SELECTED_ROLE = new SelectedRole(SelectedRole.Type.ROLE, Optional.of("FAKE_ROLE"));
     private static final Map<String, SelectedRole> FAKE_ROLES = ImmutableMap.of("FAKE_KEY", FAKE_SELECTED_ROLE);
-    private static final Map<String, String> FAKE_PREPARED_STATEMENTS = ImmutableMap.of("FAKE_KEY","FAKE_VALUE");
+    private static final Map<String, String> FAKE_PREPARED_STATEMENTS = ImmutableMap.of("FAKE_KEY", "FAKE_VALUE");
     private static final QualifiedObjectName FAKE_QUALIFIED_OBJECT_NAME = new QualifiedObjectName("catalog", "schema", "object");
     private static final TypeVariableConstraint FAKE_TYPE_CONSTRAINT = new TypeVariableConstraint("FAKE_NAME", true, true, "FAKE_BOUND", true);
     private static final List<TypeVariableConstraint> FAKE_TYPE_CONSTRAINT_LIST = ImmutableList.of(FAKE_TYPE_CONSTRAINT);
@@ -107,12 +135,26 @@ public class TestThriftTaskUpdateRequest
     private static final String FAKE_NAME = "FAKE_NAME";
     private static final TypeSignature FAKE_TYPE_SIGNATURE = TypeSignature.parseTypeSignature("FAKE_TYPE");
     private static final List<TypeSignature> FAKE_ARGUMENT_TYPES = ImmutableList.of(FAKE_TYPE_SIGNATURE);
-    private static final boolean FAKE_VARIABLE_ARITY = true;
+    private static final boolean FAKE_BOOLEAN = true;
     private static final String FAKE_DESCRIPTION = "FAKE_DESCRIPTION";
     private static final String FAKE_BODY = "FAKE_BODY";
     //values for extraCredentials and fragment
     private static final Map<String, String> FAKE_EXTRA_CREDENTIALS = ImmutableMap.of("FAKE_KEY", "FAKE_VALUE");
     private static final Optional<byte[]> FAKE_FRAGMENT = Optional.of(new byte[] {1, 2, 3, 4});
+    //values for sources
+    private static final PlanNodeId FAKE_PLAN_NODE_ID = new PlanNodeId("FAKE_ID");
+    private static final ConnectorTransactionHandle FAKE_TRANSACTION_HANDLE = TestingTransactionHandle.create();
+    private static final TestSqlTaskExecution.TestingSplit FAKE_TESTING_SPLIT = new TestSqlTaskExecution.TestingSplit(1, 7);
+    private static final Lifespan FAKE_LIFESPAN = new Lifespan(false, 4);
+    public static final SplitContext FAKE_SPLIT_CONTEXT = new SplitContext(false);
+    private static final Split FAKE_SPLIT = new Split(FAKE_CONNECTOR_ID, FAKE_TRANSACTION_HANDLE, FAKE_TESTING_SPLIT, FAKE_LIFESPAN, FAKE_SPLIT_CONTEXT);
+    private static final ScheduledSplit FAKE_SCHEDULED_SPLIT = new ScheduledSplit(123L, FAKE_PLAN_NODE_ID, FAKE_SPLIT);
+    private static final Set<ScheduledSplit> FAKE_SCHEDULED_SPLIT_SET = ImmutableSet.of(FAKE_SCHEDULED_SPLIT);
+    private static final Set<Lifespan> FAKE_LIFESPAN_SET = ImmutableSet.of(FAKE_LIFESPAN);
+    private static final TaskSource FAKE_TASK_SOURCE = new TaskSource(FAKE_PLAN_NODE_ID, FAKE_SCHEDULED_SPLIT_SET, FAKE_LIFESPAN_SET, FAKE_BOOLEAN);
+    private static final List<TaskSource> FAKE_SOURCES = ImmutableList.of(FAKE_TASK_SOURCE);
+    //values for outputIds
+    //values for tableWriteInfos
     private TaskUpdateRequest taskUpdateRequest;
 
     @BeforeMethod
@@ -214,11 +256,12 @@ public class TestThriftTaskUpdateRequest
         return new TaskUpdateRequest(
                 getSession(),
                 FAKE_EXTRA_CREDENTIALS,
-                FAKE_FRAGMENT
-        );
+                FAKE_FRAGMENT,
+                FAKE_SOURCES);
     }
 
-    private SessionRepresentation getSession() {
+    private SessionRepresentation getSession()
+    {
         ResourceEstimates resourceEstimates = new ResourceEstimates(
                 FAKE_EXECUTION_TIME,
                 FAKE_CPU_TIME,
@@ -248,22 +291,22 @@ public class TestThriftTaskUpdateRequest
                 FAKE_UNPROCESSED_CATALOG_PROPERTIES,
                 FAKE_ROLES,
                 FAKE_PREPARED_STATEMENTS,
-                sessionFunctions
-        );
+                sessionFunctions);
     }
 
-    private Map<SqlFunctionId, SqlInvokedFunction> getSessionFunctions() {
+    private Map<SqlFunctionId, SqlInvokedFunction> getSessionFunctions()
+    {
         List<Parameter> parameters = ImmutableList.of(new Parameter(FAKE_NAME, FAKE_TYPE_SIGNATURE));
         RoutineCharacteristics routineCharacteristics = new RoutineCharacteristics(
                 Optional.of(RoutineCharacteristics.Language.SQL),
                 Optional.of(RoutineCharacteristics.Determinism.DETERMINISTIC),
-                Optional.of(RoutineCharacteristics.NullCallClause.CALLED_ON_NULL_INPUT)
-        );
+                Optional.of(RoutineCharacteristics.NullCallClause.CALLED_ON_NULL_INPUT));
         SqlInvokedFunction sqlInvokedFunction = getSqlInvokedFunction(parameters, routineCharacteristics);
         return ImmutableMap.of(FAKE_SQL_FUNCTION_ID, sqlInvokedFunction);
     }
 
-    private SqlInvokedFunction getSqlInvokedFunction(List<Parameter> parameters, RoutineCharacteristics routineCharacteristics) {
+    private SqlInvokedFunction getSqlInvokedFunction(List<Parameter> parameters, RoutineCharacteristics routineCharacteristics)
+    {
         Signature signature = new Signature(
                 FAKE_QUALIFIED_OBJECT_NAME,
                 FunctionKind.AGGREGATE,
@@ -271,15 +314,13 @@ public class TestThriftTaskUpdateRequest
                 FAKE_LONG_CONSTRAINT_LIST,
                 FAKE_TYPE_SIGNATURE,
                 FAKE_ARGUMENT_TYPES,
-                FAKE_VARIABLE_ARITY
-        );
+                FAKE_BOOLEAN);
         return new SqlInvokedFunction(
                 parameters,
                 FAKE_DESCRIPTION,
                 routineCharacteristics,
                 FAKE_BODY,
                 signature,
-                FAKE_SQL_FUNCTION_ID
-        );
+                FAKE_SQL_FUNCTION_ID);
     }
 }

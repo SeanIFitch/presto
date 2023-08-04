@@ -13,10 +13,23 @@
  */
 package com.facebook.presto.cassandra;
 
+import com.facebook.drift.annotations.ThriftEnum;
+import com.facebook.drift.annotations.ThriftEnumValue;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
 
+@ThriftEnum
 public enum CassandraTransactionHandle
         implements ConnectorTransactionHandle
 {
-    INSTANCE
+    INSTANCE(1);
+
+    private final int value;
+
+    CassandraTransactionHandle(int value) { this.value = value; }
+
+    @ThriftEnumValue
+    public int getValue()
+    {
+        return value;
+    }
 }

@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.connector.system;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.common.transaction.TransactionId;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -23,6 +26,7 @@ import java.util.Objects;
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
 
+@ThriftStruct
 public class GlobalSystemTransactionHandle
         implements ConnectorTransactionHandle
 {
@@ -30,6 +34,7 @@ public class GlobalSystemTransactionHandle
     private final TransactionId transactionId;
 
     @JsonCreator
+    @ThriftConstructor
     public GlobalSystemTransactionHandle(
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("transactionId") TransactionId transactionId)
@@ -39,12 +44,14 @@ public class GlobalSystemTransactionHandle
     }
 
     @JsonProperty
+    @ThriftField(1)
     public String getConnectorId()
     {
         return connectorId;
     }
 
     @JsonProperty
+    @ThriftField(2)
     public TransactionId getTransactionId()
     {
         return transactionId;

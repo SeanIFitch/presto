@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.spi.connector;
 
+import com.facebook.drift.annotations.ThriftService;
+
+@ThriftService("ConnectorTransactionHandleService")
 public interface ConnectorTransactionHandle
 {
 }

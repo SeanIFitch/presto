@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.connector.informationSchema;
 
+import com.facebook.drift.annotations.ThriftConstructor;
+import com.facebook.drift.annotations.ThriftField;
+import com.facebook.drift.annotations.ThriftStruct;
 import com.facebook.presto.common.transaction.TransactionId;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -22,18 +25,21 @@ import java.util.Objects;
 
 import static java.util.Objects.requireNonNull;
 
+@ThriftStruct
 public class InformationSchemaTransactionHandle
         implements ConnectorTransactionHandle
 {
     private final TransactionId transactionId;
 
     @JsonCreator
+    @ThriftConstructor
     public InformationSchemaTransactionHandle(@JsonProperty("transactionId") TransactionId transactionId)
     {
         this.transactionId = requireNonNull(transactionId, "transactionId is null");
     }
 
     @JsonProperty
+    @ThriftField(1)
     public TransactionId getTransactionId()
     {
         return transactionId;

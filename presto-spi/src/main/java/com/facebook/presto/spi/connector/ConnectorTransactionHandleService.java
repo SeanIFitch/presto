@@ -11,25 +11,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.google.sheets;
+package com.facebook.presto.spi.connector;
 
-import com.facebook.drift.annotations.ThriftEnum;
-import com.facebook.drift.annotations.ThriftEnumValue;
-import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
+import com.facebook.drift.annotations.ThriftService;
 
-@ThriftEnum
-public enum SheetsTransactionHandle
-        implements ConnectorTransactionHandle
+@ThriftService(value = "presto-connector", idlName = "ConnectorTransactionHandleService")
+public class ConnectorTransactionHandleService
 {
-    INSTANCE(1);
-
-    private final int value;
-
-    SheetsTransactionHandle(int value) { this.value = value; }
-
-    @ThriftEnumValue
-    public int getValue()
-    {
-        return value;
-    }
+    public ConnectorTransactionHandleService() {}
 }
